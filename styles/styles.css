@@ -243,12 +243,62 @@ div[data-testid="stPopoverBody"]:has(.chat-panel-marker) {
   }
 }
 
+/* expanded size, toggled by the resize button in the panel header (see
+   chatbot/chat_ui.py::_on_toggle_size) - same :has() scoping trick, a
+   second marker class alongside .chat-panel-marker rather than a separate
+   element. */
+div[data-testid="stPopoverBody"]:has(.chat-panel-expanded) {
+  width: 560px !important;
+  max-width: min(94vw, 560px);
+  max-height: min(92vh, 900px);
+}
+@media (max-width: 740px) {
+  div[data-testid="stPopoverBody"]:has(.chat-panel-expanded) {
+    width: min(94vw, 560px) !important;
+  }
+}
+
+/* Quick-action prompts (chatbot/chat_ui.py::_chat_panel) are rendered
+   unconditionally and hidden via this marker/:has() combo rather than
+   being conditionally created and destroyed across reruns - Streamlit's
+   stale-widget cleanup for buttons inside a fixed-height scrollable
+   container doesn't reliably remove them once they stop being rendered,
+   so they were getting stuck fully visible after the first message.
+   Deliberately scoped to the whole popover body (same :has() trick as
+   .chat-panel-marker above) rather than to chat_history specifically -
+   chat_quick_actions is a sibling of chat_history, not nested inside it
+   (see chat_ui.py's comment on that container for why: that scrollable,
+   auto-scroll-observed container turned out to make this same :has() rule
+   flicker off for about a second partway through a pending reply). */
+div[data-testid="stPopoverBody"]:has(.qa-marker.qa-hidden) div.st-key-chat_quick_actions {
+  display: none !important;
+}
+.qa-marker { display: none; }
+
 /* chat panel header: small round logo badge + title, side by side */
 .chat-header {
   display: flex;
   align-items: center;
   gap: 0.5rem;
   margin-bottom: 0.15rem;
+}
+
+/* resize toggle: small square icon button, top-right of the header row -
+   deliberately understated next to the primary Send/Clear actions. */
+.st-key-chat_resize_toggle button {
+  padding: 0.15rem 0.4rem !important;
+  min-height: unset !important;
+  height: 1.8rem !important;
+  width: 1.8rem !important;
+  font-size: 0.95rem !important;
+  line-height: 1 !important;
+  background: transparent !important;
+  border: 1px solid var(--line) !important;
+  color: var(--maroon) !important;
+}
+.st-key-chat_resize_toggle button:hover {
+  background: var(--paper) !important;
+  border-color: var(--gold) !important;
 }
 .chat-logo {
   display: inline-block;
@@ -508,4 +558,63 @@ header[data-testid="stHeader"] { display: none !important; }
 @media (prefers-reduced-motion: reduce) {
   .carousel img { animation: none; }
   .carousel img:not(:first-child) { display: none; }
+}
+
+/* Streamlit's auto-generated "Press Enter to submit form" / "Press Enter
+   to apply" caption under every single-line text input - no Python-level
+   param exists to disable it, so it's suppressed globally here instead. */
+[data-testid="InputInstructions"] { display: none !important; }
+
+/* Product photography arrives at wildly inconsistent resolutions and
+   aspect ratios (real merchandise photos, not the old placeholder set) -
+   left alone, each card/row would take on its own source image's shape
+   and break grid alignment on the catalog, home, and cart pages. Every
+   product image is wrapped in a container keyed "prodimg_..." (see
+   components/product_card.py, pages/product.py, pages/cart.py), so one
+   rule crops them all to the same square (1:1) frame regardless of the
+   source file's own dimensions - looks right at both the small
+   catalog/cart thumbnail size and the larger product-detail size. */
+div[class*="st-key-prodimg_"] img {
+  aspect-ratio: 1 / 1;
+  width: 100%;
+  height: auto;
+  object-fit: cover;
+  object-position: center;
+  border-radius: 10px;
+  display: block;
+}
+
+/* Equal-height product cards (components/product_card.py, keyed
+   "prodcard_...") - product name/description length varies per item, so
+   without this, cards in the same st.columns() row render at different
+   heights even though every image is already uniform (see prodimg_ above).
+   height:100% fills the column (columns are flex children of the row and
+   already stretch to match the tallest one by default), and pushing the
+   View/Add-to-Cart row to the bottom via margin-top:auto means every card's
+   buttons line up on the same baseline regardless of how much text sits
+   above them.
+   Also restores the shadow/hover-lift/gold-accent styling the old
+   `div[data-testid="stVerticalBlockBorderWrapper"]` rule (above, "cards:
+   hairline borders, gentle lift") used to apply - a Streamlit upgrade
+   removed that wrapper element entirely (border=True containers now carry
+   their border directly, via an unstable per-build hash class with nothing
+   stable to select on), so that rule silently stopped matching anything.
+   Scoped to this explicit key rather than restoring it app-wide, since
+   that's the only place Streamlit still guarantees a stable class to hook. */
+div[class*="st-key-prodcard_"] {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  box-shadow: var(--shadow);
+  border-bottom: 2px solid var(--gold-soft) !important;
+  transition: box-shadow 0.22s ease, border-color 0.22s ease, transform 0.22s ease;
+}
+div[class*="st-key-prodcard_"]:hover {
+  box-shadow: var(--shadow-hover);
+  border-bottom-color: var(--gold) !important;
+  transform: translateY(-2px);
+}
+div[class*="st-key-prodcard_"] div[data-testid="stHorizontalBlock"] {
+  margin-top: auto;
+  padding-top: 0.6rem;
 }

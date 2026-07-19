@@ -53,12 +53,6 @@ Builds and runs this container standalone (image/container
 `host.docker.internal`. Override the published port with `WEB_PORT`
 (defaults to 8501).
 
-To run the whole platform together (Postgres, Ollama, the API, and this
-storefront) with one command instead, use
-[shopassist-devops](../shopassist-devops) — its `docker compose up`
-`include:`s this file unmodified and wires everything onto one shared
-container network.
-
 ### Configuration
 
 `.env` (gitignored) — falls back to `config.yaml`, then a hardcoded
@@ -66,7 +60,7 @@ default:
 
 ```env
 API_BASE_URL=http://localhost:8000
-TIMEOUT=10
+TIMEOUT=30
 APP_TITLE=IISc Alumni Store
 ENABLE_CHATBOT=true
 LOG_LEVEL=INFO

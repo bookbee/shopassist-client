@@ -23,7 +23,8 @@ def render() -> None:
     img_col, info_col = st.columns([1.1, 1.4], gap="large")
 
     with img_col:
-        st.image(product["image"], width="stretch")
+        with st.container(key=f"prodimg_detail_{product['id']}"):
+            st.image(product["image"], width="stretch")
 
     with info_col:
         st.markdown(f"# {product['name']}")

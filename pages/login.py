@@ -3,6 +3,11 @@
 Real authentication is out of scope for this demo: any non-empty user ID /
 password pair succeeds. The user ID captured here is kept in session state
 and sent with every chat request so replies can be attributed to a user.
+It's also mirrored into the ?user_id= URL query param, so a browser
+refresh (which otherwise starts a brand-new, empty session_state) still
+resolves back to the same user - see utils.helpers.init_state(), which
+restores from that param, and pages/profile.py's "Log out" button, which
+clears it.
 """
 from __future__ import annotations
 
@@ -22,6 +27,7 @@ def _on_login() -> None:
     st.session_state.login_error = None
     st.session_state.authenticated = True
     st.session_state.user_id = user_id
+    st.query_params["user_id"] = user_id
     log.info("Login ok | user_id=%s", user_id)
 
 

@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import streamlit as st
 
-from utils.helpers import get_orders, inr
+from utils.helpers import forget_chat_history, get_orders, inr
 
 
 def render() -> None:
@@ -16,7 +16,7 @@ def render() -> None:
 
     with id_col:
         with st.container(border=True):
-            st.image(profile.get("avatar", "assets/logo.png"), width="stretch")
+            st.image(profile.get("avatar", "assets/avatar_default.png"), width="stretch")
             st.markdown(f"### {profile.get('name', '—')}")
             st.markdown(
                 f"<span class='badge badge-status'>{profile.get('membership', '')}</span>",
@@ -31,6 +31,15 @@ def render() -> None:
                 st.session_state.authenticated = False
                 st.session_state.user_id = None
                 st.session_state.page = "home"
+                st.query_params.pop("user_id", None)
+                # Rotate the chat session too, so the next sign-in (same
+                # person or not, same browser tab) starts a clean
+                # conversation instead of inheriting this one - see
+                # utils.helpers.init_state()'s ?session_id= restore logic.
+                forget_chat_history(st.session_state.chat_session_id)
+                st.query_params.pop("session_id", None)
+                st.session_state.pop("chat_session_id", None)
+                st.session_state.chat_history = []
                 st.rerun()
 
     with detail_col:

@@ -15,9 +15,17 @@ def _stock_badge(stock: int) -> str:
 
 
 def render_product_card(product: dict, key_prefix: str = "card") -> None:
-    """A bordered card: image, name, blurb, price, rating, stock, actions."""
-    with st.container(border=True):
-        st.image(product["image"], width="stretch")
+    """A bordered card: image, name, blurb, price, rating, stock, actions.
+
+    Keyed so styles.css can target this specific card (not every bordered
+    container app-wide) to equalize height across a row and pin the
+    View/Add-to-Cart buttons to the bottom - product name/description length
+    varies per item, and without a shared height + bottom-anchored action
+    row, cards in the same row end up visibly different heights.
+    """
+    with st.container(border=True, key=f"prodcard_{key_prefix}_{product['id']}"):
+        with st.container(key=f"prodimg_{key_prefix}_{product['id']}"):
+            st.image(product["image"], width="stretch")
         st.markdown(
             f"<span class='badge badge-cat'>{product['category']}</span>",
             unsafe_allow_html=True,

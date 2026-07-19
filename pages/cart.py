@@ -26,7 +26,9 @@ def render() -> None:
             product, qty = line["product"], line["qty"]
             with st.container(border=True):
                 img, info, controls = st.columns([0.9, 2.2, 1.3])
-                img.image(product["image"], width="stretch")
+                with img:
+                    with st.container(key=f"prodimg_cart_{product['id']}"):
+                        st.image(product["image"], width="stretch")
                 with info:
                     st.markdown(f"**{product['name']}**")
                     st.markdown(
