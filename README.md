@@ -25,7 +25,7 @@ pip install -r requirements.txt
 streamlit run app.py
 ```
 
-Log in with any user ID/password (demo auth only — nothing is checked).
+Log in with any user ID, using that same value as the password too (demo auth only — see `pages/login.py`).
 The chat widget needs a gateway on `API_BASE_URL`; for local demos, run the
 included stdlib mock in a second terminal:
 
@@ -78,7 +78,8 @@ shopassist-client/
 ├── mock_gateway.py         local stand-in for the API Gateway
 ├── pages/                  login, home, catalog, product, cart, checkout, orders, profile, about
 ├── components/             navbar, footer, product_card, cart_widget
-├── chatbot/                api_client.py + models.py (API integration, see below) and chat_ui.py (UI)
+├── chatbot/                api_client.py + models.py (API integration, see below), chat_ui.py (UI),
+│                           voice_input.py + voice_input/frontend (mic button, see below)
 ├── data/                   products, orders, profile, faq, announcements — all JSON
 ├── utils/                  helpers, constants
 ├── styles/styles.css       theme, chat panel, chat logo/watermark
@@ -102,6 +103,22 @@ shopassist-client/
   (`div[data-testid="stPopoverBody"]:has(.chat-panel-marker)`) — tall
   enough that the history pane, quick-action prompts, and input row all
   fit on open without an inner scrollbar on a typical viewport.
+- Layout: row 1 is the message input with the mic button to its right;
+  row 2 is "Clear conversation" (left) and "Send" (right). The message
+  input still lives inside an `st.form` so pressing Enter submits it
+  without also submitting on an unrelated blur (clicking Clear/a quick
+  action/the mic while text sits unsent) — the form's own submit button
+  is visually hidden (`.st-key-chat_send_hidden` in styles.css) and the
+  visible "Send" button is a small JS proxy (`components.html`) that
+  forwards its click onto that real button. See `_on_form_send`'s
+  docstring in `chat_ui.py` for why.
+- Voice input: the mic button (`chatbot/voice_input.py` +
+  `chatbot/voice_input/frontend/index.html`) is a hand-rolled Streamlit
+  component (no build step) that transcribes speech via the browser's
+  native Web Speech API and enqueues the transcript like a quick-action
+  click. It fails soft — the button doesn't render at all on browsers
+  without `SpeechRecognition` support (Safari, Firefox as of this
+  writing).
 
 ### Logging
 

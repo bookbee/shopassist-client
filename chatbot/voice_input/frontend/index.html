@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<!--
+  Voice-input Streamlit component — a single mic button that transcribes
+  speech to text via the browser's native Web Speech API and reports the
+  transcript back to Python via Streamlit's public component protocol
+  (streamlit:componentReady / setFrameHeight / setComponentValue - see
+  https://docs.streamlit.io/develop/concepts/custom-components/intro).
+
+  Deliberately hand-rolled in plain HTML/JS rather than a React build: this
+  protocol is small and has been stable for years, and avoiding a
+  build/npm step keeps this feature's footprint to one static file, no new
+  pip/npm dependency for a project that has none today.
+
+  Fails soft: on a browser without SpeechRecognition support (Safari,
+  Firefox as of this writing), the button never renders at all rather than
+  showing something broken - see the feature-detect at the top of the
+  script below.
+-->
+<html>
+<head>
+<meta charset="utf-8" />
+<style>
+  html, body {
+    margin: 0; padding: 0; background: transparent;
+    display: flex; align-items: center; justify-content: center;
+    height: 100%;
+  }
+  #mic-btn {
+    width: 38px; height: 38px; border-radius: 50%;
+    border: 1px solid #8B3355; background: #FFFDF9;
+    color: #8B3355; font-size: 16px; line-height: 1;
+    cursor: pointer; display: flex; align-items: center; justify-content: center;
+    transition: background 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
+  }
+  #mic-btn:hover { background: #8B3355; color: #FFFDF9; }
+  #mic-btn.listening {
+    background: #66203E; color: #FFFDF9;
+    box-shadow: 0 0 0 4px rgba(139, 51, 85, 0.18);
+    animation: mic-pulse 1.1s ease-in-out infinite;
+  }
+  #mic-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  #mic-btn svg { width: 16px; height: 16px; display: block; }
+  @keyframes mic-pulse {
+    0%, 100% { box-shadow: 0 0 0 4px rgba(139, 51, 85, 0.18); }
+    50% { box-shadow: 0 0 0 7px rgba(139, 51, 85, 0.28); }
+  }
+</style>
+</head>
+<body>
+<!-- Simple abstract mic glyph (capsule + stand), not the emoji - reads
+     cleanly at 16px and inherits the button's color via currentColor. -->
+<button id="mic-btn" type="button" title="Speak your message">
+  <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+    <path d="M12 15a3.5 3.5 0 0 0 3.5-3.5v-6a3.5 3.5 0 0 0-7 0v6A3.5 3.5 0 0 0 12 15z"/>
+    <path d="M18.5 11.5a1 1 0 0 0-2 0 4.5 4.5 0 0 1-9 0 1 1 0 0 0-2 0 6.5 6.5 0 0 0 5.75 6.46V20H9a1 1 0 0 0 0 2h6a1 1 0 0 0 0-2h-1.75v-2.04A6.5 6.5 0 0 0 18.5 11.5z"/>
+  </svg>
+</button>
+<script>
+(function () {
+  function post(msg) {
+    window.parent.postMessage(Object.assign({ isStreamlitMessage: true }, msg), "*");
+  }
+  function setFrameHeight(h) { post({ type: "streamlit:setFrameHeight", height: h }); }
+  function setComponentValue(value) { post({ type: "streamlit:setComponentValue", value: value }); }
+
+  // componentReady must be sent (and processed by the parent) before it
+  // will honor any setFrameHeight/setComponentValue from this iframe -
+  // sending it first, before anything else, is what actually matters here
+  // (found by inspecting the rendered iframe's height getting stuck at 0
+  // when this was sent last).
+  post({ type: "streamlit:componentReady", apiVersion: 1 });
+
+  var btn = document.getElementById("mic-btn");
+  var SpeechRecognitionImpl = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+  if (!SpeechRecognitionImpl) {
+    // No support (Safari/Firefox today) - render nothing, claim zero
+    // height so the layout doesn't leave a gap where the button would be.
+    document.body.innerHTML = "";
+    setFrameHeight(0);
+  } else {
+    var recognition = null;
+    var listening = false;
+
+    function setListening(isListening) {
+      listening = isListening;
+      btn.classList.toggle("listening", isListening);
+    }
+
+    function start() {
+      if (listening) { if (recognition) recognition.stop(); return; }
+      recognition = new SpeechRecognitionImpl();
+      recognition.lang = "en-IN";
+      recognition.interimResults = false;
+      recognition.maxAlternatives = 1;
+      recognition.onstart = function () { setListening(true); };
+      recognition.onerror = function () { setListening(false); };
+      recognition.onend = function () { setListening(false); };
+      recognition.onresult = function (event) {
+        var transcript = event.results[0][0].transcript;
+        if (transcript && transcript.trim()) {
+          // {text, id}: id is fresh every time so the Python side can tell
+          // a genuinely new transcript apart from the same value simply
+          // persisting across an unrelated rerun (Streamlit component
+          // values are sticky, not one-shot events, by default).
+          setComponentValue({
+            text: transcript.trim(),
+            id: Date.now() + "-" + Math.random().toString(36).slice(2),
+          });
+        }
+      };
+      try {
+        recognition.start();
+      } catch (e) {
+        setListening(false);
+      }
+    }
+
+    btn.addEventListener("click", start);
+    setFrameHeight(44);
+  }
+
+  window.addEventListener("message", function (event) {
+    var data = event.data;
+    if (!data || data.type !== "streamlit:render") return;
+    var args = data.args || {};
+    btn.disabled = !!args.disabled;
+  });
+})();
+</script>
+</body>
+</html>

@@ -317,6 +317,14 @@ div[data-testid="stPopoverBody"]:has(.qa-marker.qa-hidden) div.st-key-chat_quick
   color: var(--ink);
 }
 
+/* chat_form's own submit button (chatbot/chat_ui.py) only exists so
+   pressing Enter in the message input submits it - st.form requires a
+   real form_submit_button to exist for that. Hidden, not removed: the
+   row-2 "Send" button's JS proxy still clicks it programmatically, and a
+   real click would still work too - Enter-to-submit and the click path
+   both rely on this same element actually being live in the DOM. */
+.st-key-chat_send_hidden { display: none; }
+
 /* chat history pane: faint centered logo watermark for the empty state,
    layered under an ivory wash so it stays subtle once bubbles fill it. */
 .st-key-chat_history {

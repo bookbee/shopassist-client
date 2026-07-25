@@ -25,6 +25,7 @@ from streamlit.components.v1 import html as components_html
 
 from chatbot.api_client import UNAVAILABLE_MESSAGE, send_message
 from chatbot.models import ChatResponse
+from chatbot.voice_input import voice_input
 from config import settings
 from utils.constants import CHAT_QUICK_ACTIONS, TICKET_RESPONSE_TIME
 from utils.helpers import forget_chat_history, get_logger, get_or_create_chat_history
@@ -147,6 +148,20 @@ def _resolve_pending() -> None:
 # Widget callbacks (run before the rerun, so the dialog stays open)
 # --------------------------------------------------------------------------- #
 def _on_form_send() -> None:
+    """The real (but visually hidden - see styles.css's .st-key-chat_send_hidden
+    rule) form_submit_button's on_click. Fires when the user presses Enter in
+    the message input, or when the visible "Send" button in row 2 below
+    forwards a JS-triggered click onto this real button (see the
+    components.html snippet at that button's definition) - either way, a
+    genuine form submission, so chat_text is guaranteed fresh here and
+    clear_on_submit handles clearing it.
+
+    Deliberately kept as a real st.form: a bare (non-form) text_input's
+    on_change fires on ANY blur, not just Enter - clicking Clear
+    conversation, a quick action, or the mic while text sits unsent in the
+    box would silently send it too. A real HTML form only submits on Enter
+    or an explicit submit-button click, which is exactly the distinction
+    needed here."""
     _enqueue(st.session_state.get("chat_text", ""))
 
 
@@ -323,24 +338,81 @@ def _chat_panel() -> None:
                 disabled=pending,
             )
 
-    with st.form("chat_form", clear_on_submit=True, border=False):
-        text_col, send_col = st.columns([4, 1])
-        text_col.text_input(
-            "Message",
-            key="chat_text",
-            placeholder="Type a message…",
-            label_visibility="collapsed",
-            disabled=pending,
-        )
-        send_col.form_submit_button("Send", type="primary", on_click=_on_form_send,
-                                    width="stretch", disabled=pending)
+    # Row 1: message input + mic button, mic to the right of the input.
+    # text_input still lives inside a form purely so pressing Enter submits
+    # it without also submitting on a plain blur (clicking Clear
+    # conversation/a quick action/the mic while text sits unsent in the box)
+    # - see _on_form_send's docstring. The form's own submit button is
+    # visually hidden (styles.css's .st-key-chat_send_hidden rule); the
+    # user-facing "Send" button lives in row 2 below as a JS proxy that
+    # forwards its click onto this real one - see that button's own comment.
+    #
+    # Mic button is a sibling of chat_form, not inside it - it acts
+    # immediately on a transcript (like a quick-action click), it doesn't
+    # wait for a "Send" click the way the text input does. See
+    # chatbot/voice_input.py's own docstring for why a fresh transcript
+    # is enqueued+rerun right here rather than via an on_click callback -
+    # custom components report their value during the normal script body,
+    # not in a separate callback phase the way native widgets do.
+    form_col, mic_col = st.columns([6, 1])
+    with form_col:
+        with st.form("chat_form", clear_on_submit=True, border=False):
+            st.text_input(
+                "Message",
+                key="chat_text",
+                placeholder="Type a message…",
+                label_visibility="collapsed",
+                disabled=pending,
+            )
+            st.form_submit_button("Send", key="chat_send_hidden", on_click=_on_form_send, disabled=pending)
+    with mic_col:
+        voice_text = voice_input(key="chat_voice", disabled=pending)
 
-    st.button(
-        "Clear conversation",
-        key="chat_clear",
-        on_click=_on_clear,
-        disabled=(not st.session_state.chat_history) or pending,
-    )
+    if voice_text and not pending:
+        _enqueue(voice_text)
+        st.rerun()
+
+    # Row 2: "Clear conversation" at the left corner, "Send" at the right.
+    # Clear conversation is a plain st.button (st.form can't contain one -
+    # only form_submit_button - and _on_clear has nothing to do with the
+    # form's text anyway). The visible "Send" here is NOT a second Streamlit
+    # widget - it's a real HTML button rendered via components.html whose
+    # onclick reaches into the parent document (same trick _AUTOSCROLL_JS
+    # uses above) and clicks the real, hidden form_submit_button in row 1,
+    # so the actual send still goes through one genuine form submission
+    # either way Enter or this button is used.
+    clear_col, send_col = st.columns([3, 1])
+    with clear_col:
+        st.button(
+            "Clear conversation",
+            key="chat_clear",
+            on_click=_on_clear,
+            disabled=(not st.session_state.chat_history) or pending,
+        )
+    with send_col:
+        components_html(
+            f"""
+            <button id="send-proxy" type="button" {"disabled" if pending else ""}>Send</button>
+            <style>
+              html, body {{ margin: 0; padding: 0; }}
+              #send-proxy {{
+                width: 100%; height: 2.5rem; border-radius: 0.5rem; border: none;
+                background: {settings.colors['primary']}; color: #FFFDF9;
+                font-family: "Source Sans Pro", sans-serif; font-size: 1rem; font-weight: 600;
+                cursor: pointer;
+              }}
+              #send-proxy:hover {{ filter: brightness(1.08); }}
+              #send-proxy:disabled {{ opacity: 0.4; cursor: not-allowed; }}
+            </style>
+            <script>
+              document.getElementById("send-proxy").addEventListener("click", function () {{
+                var realBtn = window.parent.document.querySelector(".st-key-chat_send_hidden button");
+                if (realBtn) {{ realBtn.click(); }}
+              }});
+            </script>
+            """,
+            height=40,
+        )
 
     # Resolving pending last, after every other element in the panel has
     # already rendered once for this run - st.rerun() halts execution
