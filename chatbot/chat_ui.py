@@ -209,8 +209,9 @@ def _stream_bot_reply(msg: dict) -> None:
 def _render_history() -> None:
     if not st.session_state.chat_history:
         st.markdown(
-            "<div class='chat-bot'>Namaste! I can track orders, explain products, "
-            "suggest gifts, or connect you to support. How can I help?</div>",
+            "<div class='chat-bot'>Namaste! I'm Maximus, your IISc Alumni Store assistant. "
+            "I can track orders, explain products, suggest gifts, or connect you to support. "
+            "How can I help?</div>",
             unsafe_allow_html=True,
         )
         return
