@@ -78,6 +78,48 @@ def _inject_autoscroll() -> None:
     components_html(_AUTOSCROLL_JS, height=0)
 
 
+# Refocuses the message input the moment it flips from disabled back to
+# enabled - a fresh reply just finished arriving, since the input is
+# disabled for the whole pending/typing-indicator window (see _chat_panel).
+# Streamlit repaints the DOM from scratch on rerun, which drops whatever the
+# browser had focused, so without this the customer has to click back into
+# the box before they can keep typing - exactly the "cursor isn't in the box
+# after the answer comes" behaviour.
+#
+# A one-shot script (check once, focus if enabled) turns out not to fire
+# reliably here: components.html only re-loads its iframe when the HTML it's
+# given actually changes, and this string is the same every render, so the
+# embedded <script> only really runs on the panel's first-ever open, not on
+# every subsequent reply - the same reason _AUTOSCROLL_JS above is a
+# persistent MutationObserver rather than a plain scrollToBottom() call.
+# This uses the identical pattern: attach one observer to the real <input>
+# (guarded by a dataset flag so a second, redundant iframe load - if one
+# ever does occur - can't double-attach) that watches specifically for its
+# `disabled` attribute changing, and focuses it every time that flips to
+# enabled - which then keeps working for every future reply, without this
+# script needing to run again itself.
+_FOCUS_INPUT_JS = """
+<script>
+(function() {
+  function attach() {
+    var el = window.parent.document.querySelector('.st-key-chat_text input');
+    if (!el || el.dataset.focusRestoreObserved) { return; }
+    el.dataset.focusRestoreObserved = "1";
+    if (!el.disabled) { el.focus(); }
+    new MutationObserver(function() {
+      if (!el.disabled) { el.focus(); }
+    }).observe(el, {attributes: true, attributeFilter: ['disabled']});
+  }
+  attach();
+})();
+</script>
+"""
+
+
+def _inject_focus_restore() -> None:
+    components_html(_FOCUS_INPUT_JS, height=0)
+
+
 def _new_ticket(response: ChatResponse) -> dict:
     ticket = response.ticket or {}
     return {
@@ -209,8 +251,9 @@ def _stream_bot_reply(msg: dict) -> None:
 def _render_history() -> None:
     if not st.session_state.chat_history:
         st.markdown(
-            "<div class='chat-bot'>Namaste! I can track orders, explain products, "
-            "suggest gifts, or connect you to support. How can I help?</div>",
+            "<div class='chat-bot'>Namaste! I'm Maximus, your IISc Alumni Store assistant. "
+            "I can track orders, explain products, suggest gifts, or connect you to support. "
+            "How can I help?</div>",
             unsafe_allow_html=True,
         )
         return
@@ -426,6 +469,11 @@ def _chat_panel() -> None:
     if pending:
         _resolve_pending()
         st.rerun()
+
+    # Only reached when not pending (the branch above halts execution via
+    # st.rerun() otherwise) - see _inject_focus_restore's own docstring for
+    # why that's exactly the right moment.
+    _inject_focus_restore()
 
 
 def render_chatbot() -> None:
