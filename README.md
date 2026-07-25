@@ -21,11 +21,18 @@ git clone https://github.com/bookbee/shopassist-client
 cd shopassist-client
 python -m venv .venv
 source .venv/bin/activate   # Windows: .venv\Scripts\activate
-pip install -r requirements.txt
+pip install -r requirements-dev.txt
 streamlit run app.py
 ```
 
-Log in with any user ID/password (demo auth only — nothing is checked).
+`requirements-dev.txt` is `requirements.txt` plus `watchdog`, so Streamlit
+picks up saved file edits and reruns automatically — without it, Streamlit
+falls back to slow polling (or, in some environments, doesn't notice edits
+at all until the process is restarted by hand). The Docker image installs
+`requirements.txt` alone; `watchdog` has nothing to do inside a container
+you're not live-editing.
+
+Log in with any user ID, using that same value as the password too (demo auth only — see `pages/login.py`).
 The chat widget needs a gateway on `API_BASE_URL`; for local demos, run the
 included stdlib mock in a second terminal:
 
@@ -53,12 +60,6 @@ Builds and runs this container standalone (image/container
 `host.docker.internal`. Override the published port with `WEB_PORT`
 (defaults to 8501).
 
-To run the whole platform together (Postgres, Ollama, the API, and this
-storefront) with one command instead, use
-[shopassist-devops](../shopassist-devops) — its `docker compose up`
-`include:`s this file unmodified and wires everything onto one shared
-container network.
-
 ### Configuration
 
 `.env` (gitignored) — falls back to `config.yaml`, then a hardcoded
@@ -66,7 +67,7 @@ default:
 
 ```env
 API_BASE_URL=http://localhost:8000
-TIMEOUT=10
+TIMEOUT=30
 APP_TITLE=IISc Alumni Store
 ENABLE_CHATBOT=true
 LOG_LEVEL=INFO
@@ -84,7 +85,8 @@ shopassist-client/
 ├── mock_gateway.py         local stand-in for the API Gateway
 ├── pages/                  login, home, catalog, product, cart, checkout, orders, profile, about
 ├── components/             navbar, footer, product_card, cart_widget
-├── chatbot/                api_client.py + models.py (API integration, see below) and chat_ui.py (UI)
+├── chatbot/                api_client.py + models.py (API integration, see below), chat_ui.py (UI),
+│                           voice_input.py + voice_input/frontend (mic button, see below)
 ├── data/                   products, orders, profile, faq, announcements — all JSON
 ├── utils/                  helpers, constants
 ├── styles/styles.css       theme, chat panel, chat logo/watermark
@@ -108,6 +110,22 @@ shopassist-client/
   (`div[data-testid="stPopoverBody"]:has(.chat-panel-marker)`) — tall
   enough that the history pane, quick-action prompts, and input row all
   fit on open without an inner scrollbar on a typical viewport.
+- Layout: row 1 is the message input with the mic button to its right;
+  row 2 is "Clear conversation" (left) and "Send" (right). The message
+  input still lives inside an `st.form` so pressing Enter submits it
+  without also submitting on an unrelated blur (clicking Clear/a quick
+  action/the mic while text sits unsent) — the form's own submit button
+  is visually hidden (`.st-key-chat_send_hidden` in styles.css) and the
+  visible "Send" button is a small JS proxy (`components.html`) that
+  forwards its click onto that real button. See `_on_form_send`'s
+  docstring in `chat_ui.py` for why.
+- Voice input: the mic button (`chatbot/voice_input.py` +
+  `chatbot/voice_input/frontend/index.html`) is a hand-rolled Streamlit
+  component (no build step) that transcribes speech via the browser's
+  native Web Speech API and enqueues the transcript like a quick-action
+  click. It fails soft — the button doesn't render at all on browsers
+  without `SpeechRecognition` support (Safari, Firefox as of this
+  writing).
 
 ### Logging
 

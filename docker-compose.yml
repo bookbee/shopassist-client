@@ -2,7 +2,7 @@
 #
 # `docker compose up` from inside this repo alone builds and runs just
 # this container - same self-contained pattern as shopassist's own
-# docker-compose.yml (and shopassist-database's / shopassist-model's).
+# docker-compose.yml (and shopassist-database's).
 # shopassist-devops's root docker-compose.yml `include:`s this file
 # unmodified and layers the platform-wide network + the real
 # container-network API URL on top (see that repo's README) - it's the

@@ -104,19 +104,56 @@ def get_announcements() -> list[dict]:
 
 
 # --------------------------------------------------------------------------- #
+# Chat transcript store (server-side, keyed by chat_session_id)
+# --------------------------------------------------------------------------- #
+# In-memory only - a browser refresh starts a brand-new, empty
+# session_state, so the visible chat transcript would otherwise vanish even
+# though chat_session_id (a small UUID, persisted via the ?session_id= URL
+# query param - see init_state() below) stays the same. Keyed by that same
+# id so a refresh resumes its own transcript, as long as this server
+# process is still running. Resets on server restart - an accepted
+# tradeoff for this capstone project rather than standing up a real
+# datastore for chat transcripts.
+_CHAT_HISTORY_STORE: dict[str, list[dict]] = {}
+
+
+def get_or_create_chat_history(session_id: str) -> list:
+    """Returns the SAME list object every time for a given session_id, so
+    appending to session_state.chat_history (chatbot/chat_ui.py::_push)
+    updates this store automatically - no separate sync step needed."""
+    return _CHAT_HISTORY_STORE.setdefault(session_id, [])
+
+
+def forget_chat_history(session_id: str) -> None:
+    """Drops a session's stored transcript - see chatbot/chat_ui.py's
+    "Clear conversation" button and pages/profile.py's "Log out" button."""
+    _CHAT_HISTORY_STORE.pop(session_id, None)
+
+
+# --------------------------------------------------------------------------- #
 # Session state
 # --------------------------------------------------------------------------- #
 def init_state() -> None:
-    """Idempotently seed everything the app keeps in Streamlit session state."""
+    """Idempotently seed everything the app keeps in Streamlit session state.
+
+    Also restores, from the URL's query params, everything a browser
+    refresh would otherwise drop (session_state itself is brand-new and
+    empty on every refresh):
+
+    - ?user_id= - the signed-in identity. pages/login.py::_on_login()
+      writes it on sign-in; pages/profile.py's "Log out" button clears it.
+    - ?session_id= - the chat session's small UUID, which doubles as the
+      key into _CHAT_HISTORY_STORE above, so the visible chat transcript
+      survives the refresh too, not just the user_id.
+    """
     defaults: dict[str, Any] = {
         "page": "home",                  # current router target
         "cart": {},                      # {product_id: qty}
         "authenticated": False,          # gates the app behind pages/login.py
         "user_id": None,                 # identity captured at login; sent with chat requests
         "profile": get_profile(),
-        "chat_history": [],              # [{role, content, meta}]
-        "chat_session_id": str(uuid4()),
         "chat_pending": None,            # user message awaiting a gateway reply, or None
+        "chat_expanded": False,          # toggled by the panel's resize button
         "selected_product": None,        # product_id for detail page
         "checkout": {"step": "form", "order_id": None, "eta": None},
         "recently_viewed": [],           # [product_id]
@@ -125,6 +162,22 @@ def init_state() -> None:
     }
     for key, value in defaults.items():
         st.session_state.setdefault(key, value)
+
+    if not st.session_state.authenticated:
+        remembered_user_id = st.query_params.get("user_id")
+        if remembered_user_id:
+            st.session_state.authenticated = True
+            st.session_state.user_id = remembered_user_id
+
+    # Only on this session_state's first-ever run (a fresh browser
+    # connection, or a refresh) - subsequent reruns already have this set
+    # and shouldn't re-touch it.
+    if "chat_session_id" not in st.session_state:
+        remembered_session_id = st.query_params.get("session_id")
+        session_id = remembered_session_id or str(uuid4())
+        st.session_state.chat_session_id = session_id
+        st.query_params.setdefault("session_id", session_id)
+        st.session_state.chat_history = get_or_create_chat_history(session_id)
 
 
 def go_to(page: str) -> None:

@@ -1,0 +1,10 @@
+# Local development only - not installed in the Docker image (Dockerfile
+# installs requirements.txt alone). Streamlit's own file watcher runs
+# fine without this, just via slower filesystem polling instead of
+# watchdog's OS-level file-change events.
+-r requirements.txt
+
+# Lets Streamlit pick up saved file edits and rerun automatically instead
+# of polling (or, without either, silently serving stale code until the
+# process is restarted by hand).
+watchdog>=3.0
