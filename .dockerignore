@@ -1,0 +1,9 @@
+.venv/
+.git/
+.env
+__pycache__/
+*.pyc
+logs/
+mock_gateway.py
+README.md
+capstone/

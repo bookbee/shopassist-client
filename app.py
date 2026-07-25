@@ -1,4 +1,4 @@
-"""IISc Alumni Store — Streamlit entrypoint.
+"""IISc Alumni Store — entrypoint.
 
 A capstone demonstration of an AI-enabled alumni merchandise portal.
 Everything (catalog, cart, checkout, orders, profile) is mocked from JSON
@@ -10,6 +10,8 @@ Run with:
 """
 from __future__ import annotations
 
+import base64
+from functools import lru_cache
 from pathlib import Path
 
 import streamlit as st
@@ -35,8 +37,31 @@ ROUTES = {
 }
 
 
+@lru_cache(maxsize=1)
+def _brand_logo_data_uri() -> str | None:
+    """Small logo, base64-inlined so styles.css can use it as a CSS
+    background (chat header badge + chat panel watermark) without relying
+    on Streamlit's static file serving. Uses the pre-shrunk 160x160 copy —
+    plenty sharp at the small sizes it's actually displayed at, a fraction
+    of the full asset's size to re-send on every rerun.
+    """
+    logo_path = Path(__file__).parent / "assets" / "logo_small.png"
+    try:
+        encoded = base64.b64encode(logo_path.read_bytes()).decode("ascii")
+    except OSError as exc:
+        log.warning("Could not load brand logo: %s", exc)
+        return None
+    return f"data:image/png;base64,{encoded}"
+
+
 def load_css() -> None:
     css_path = Path(__file__).parent / "styles" / "styles.css"
+    logo_uri = _brand_logo_data_uri()
+    if logo_uri:
+        st.markdown(
+            f"<style>:root {{ --brand-logo: url('{logo_uri}'); }}</style>",
+            unsafe_allow_html=True,
+        )
     try:
         st.markdown(f"<style>{css_path.read_text(encoding='utf-8')}</style>",
                     unsafe_allow_html=True)

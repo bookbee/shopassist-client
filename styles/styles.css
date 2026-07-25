@@ -220,7 +220,7 @@ div[data-testid="stVerticalBlockBorderWrapper"]:hover {
   50% { box-shadow: 0 10px 28px rgba(94, 33, 56, 0.30), 0 0 0 10px rgba(194, 162, 75, 0.14); }
 }
 
-/* the floating assistant panel itself — Streamlit portals the popover body
+/* the floating assistant panel itself — client portals the popover body
    outside .st-key-chat_launcher, so it's scoped via the .chat-panel-marker
    child (see chatbot/chat_ui.py) instead of descendant nesting. */
 div[data-testid="stPopoverBody"]:has(.chat-panel-marker) {
@@ -228,7 +228,11 @@ div[data-testid="stPopoverBody"]:has(.chat-panel-marker) {
   border-radius: var(--radius);
   width: 380px !important;
   max-width: min(90vw, 380px);
-  max-height: min(70vh, 620px);
+  /* Tall enough that the launcher, history pane, quick-action prompts, and
+     input row all fit on open without an outer scrollbar on a typical
+     laptop viewport — overflow-y stays as a safety net for short windows,
+     not the expected path. */
+  max-height: min(85vh, 720px);
   overflow-y: auto;
   box-shadow: 0 14px 34px rgba(58, 46, 51, 0.22);
 }
@@ -237,6 +241,42 @@ div[data-testid="stPopoverBody"]:has(.chat-panel-marker) {
   div[data-testid="stPopoverBody"]:has(.chat-panel-marker) {
     width: min(92vw, 380px) !important;
   }
+}
+
+/* chat panel header: small round logo badge + title, side by side */
+.chat-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.15rem;
+}
+.chat-logo {
+  display: inline-block;
+  width: 24px;
+  height: 24px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background-color: var(--ivory);
+  background-image: var(--brand-logo);
+  background-size: cover;
+  background-position: center;
+  border: 1px solid var(--gold-soft);
+}
+.chat-header-title {
+  font-weight: 700;
+  color: var(--ink);
+}
+
+/* chat history pane: faint centered logo watermark for the empty state,
+   layered under an ivory wash so it stays subtle once bubbles fill it. */
+.st-key-chat_history {
+  background-color: var(--ivory);
+  background-image:
+    linear-gradient(rgba(255, 253, 249, 0.93), rgba(255, 253, 249, 0.93)),
+    var(--brand-logo);
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: cover, 150px 150px;
 }
 
 /* chat bubbles */
@@ -267,6 +307,42 @@ div[data-testid="stPopoverBody"]:has(.chat-panel-marker) {
   color: var(--gold);
   font-weight: 700;
   margin-top: 0.5rem;
+}
+
+/* "assistant is typing" indicator, shown while a reply is in flight */
+.chat-typing {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.chat-typing span {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--ink);
+  opacity: 0.35;
+  animation: chat-typing-bounce 1.1s ease-in-out infinite;
+}
+.chat-typing span:nth-child(2) { animation-delay: 0.15s; }
+.chat-typing span:nth-child(3) { animation-delay: 0.3s; }
+@keyframes chat-typing-bounce {
+  0%, 60%, 100% { transform: translateY(0); opacity: 0.35; }
+  30% { transform: translateY(-4px); opacity: 0.9; }
+}
+
+/* blinking dot trailing the in-progress word during the typewriter reveal
+   (see chatbot/chat_ui.py::_stream_bot_reply) */
+.chat-cursor {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--ink);
+  animation: chat-cursor-blink 0.9s steps(1) infinite;
+}
+@keyframes chat-cursor-blink {
+  0%, 49% { opacity: 0.9; }
+  50%, 100% { opacity: 0; }
 }
 
 /* order timeline */

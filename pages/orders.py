@@ -37,7 +37,7 @@ def _render_timeline(order: dict) -> None:
 def render() -> None:
     st.markdown("# Order History")
     st.markdown("<div class='crest-rule'></div>", unsafe_allow_html=True)
-    st.caption("Tip: ask the assistant “Where is order IISC202600145?” to track by chat.")
+    st.caption("Tip: ask the assistant “Where is order ord-1001?” to track by chat.")
 
     for order in get_orders():
         with st.container(border=True):

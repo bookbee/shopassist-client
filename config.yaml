@@ -15,7 +15,11 @@ api:
   # Override with API_BASE_URL in .env for deployments.
   base_url: "http://localhost:8000"
   chat_endpoint: "/api/v1/chat"
-  timeout_seconds: 10
+  timeout_seconds: 60
+  # Dummy placeholder for the gateway's X-API-Key auth (see shopassist's
+  # api/security.py). Override with API_KEY in .env once a real key is
+  # issued - harmless as-is while the gateway's API_KEY_ENFORCE is off.
+  api_key: "iisc-genai-c2g2p7"
 
 colors:
   primary: "#8B3355"     # IISc maroon

@@ -33,7 +33,7 @@ def render() -> None:
         st.markdown("## Alumni Store sign in")
         st.caption("Demo login — any user ID / password combination works.")
         with st.form("login_form", border=True):
-            st.text_input("User ID", key="login_user_id", placeholder="e.g. alumni2018")
+            st.text_input("User ID", key="login_user_id", placeholder="e.g. alum-1001")
             st.text_input("Password", key="login_password", type="password")
             st.form_submit_button(
                 "Sign in", type="primary", width="stretch", on_click=_on_login

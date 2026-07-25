@@ -33,7 +33,7 @@ DELIVERY_DAYS_ESTIMATE: int = 5
 TICKET_RESPONSE_TIME: str = "within 24 hours"
 
 CHAT_QUICK_ACTIONS: tuple[str, ...] = (
-    "Where is order IISC202600145?",
+    "Where is order ord-1001?",
     "What material is the hoodie?",
     "Suggest gifts below ₹1000",
     "I want to return a product",

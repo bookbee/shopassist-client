@@ -1,0 +1,49 @@
+# ShopAssist :: storefront client, standalone.
+#
+# `docker compose up` from inside this repo alone builds and runs just
+# this container - same self-contained pattern as shopassist's own
+# docker-compose.yml (and shopassist-database's / shopassist-model's).
+# shopassist-devops's root docker-compose.yml `include:`s this file
+# unmodified and layers the platform-wide network + the real
+# container-network API URL on top (see that repo's README) - it's the
+# one that wires this up to the real, containerized shopassist API.
+#
+# Standalone (no shopassist-devops), this container talks to the API on
+# the host - `cd ../shopassist && docker compose up -d`, published on
+# localhost:8000 - reached through `host.docker.internal`, which Docker
+# Desktop resolves out of the box on macOS/Windows and the `extra_hosts`
+# entry below adds on Linux.
+services:
+  client:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: shopassist-client:latest
+    container_name: shopassist-client
+    restart: unless-stopped
+    ports:
+      - "${WEB_PORT:-8501}:8501"
+    environment:
+      # Deliberately not ${API_BASE_URL} from this project's own .env -
+      # that file's default (http://localhost:8000) is correct for running
+      # the app directly on the host, but "localhost" means the container
+      # itself once inside Docker, not the host machine.
+      API_BASE_URL: http://host.docker.internal:8000
+      TIMEOUT: "60"
+      APP_TITLE: IISc Alumni Store
+      ENABLE_CHATBOT: "true"
+      LOG_LEVEL: INFO
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8501/_stcore/health')"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 20s
+    networks:
+      - shopassist-client-network
+
+networks:
+  shopassist-client-network:
+    name: shopassist-client-network

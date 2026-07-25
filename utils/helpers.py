@@ -31,11 +31,18 @@ LOG_DIR = PROJECT_ROOT / "logs"
 # Logging
 # --------------------------------------------------------------------------- #
 def get_logger(name: str = "alumni_store") -> logging.Logger:
-    """Return an app logger writing INFO+ to logs/app.log (rotating)."""
+    """Return an app logger writing INFO+ to logs/app.log (rotating).
+
+    Every call site names its own child logger (e.g. "alumni_store.chat")
+    so %(name)s identifies the module in app.log. Each gets its own handler
+    below, so propagate is disabled — otherwise a record would also bubble
+    up to the parent "alumni_store" logger's handler and get written twice.
+    """
     logger = logging.getLogger(name)
     if logger.handlers:
         return logger
     logger.setLevel(getattr(logging, settings.log_level, logging.INFO))
+    logger.propagate = False
     LOG_DIR.mkdir(exist_ok=True)
     handler = RotatingFileHandler(
         LOG_DIR / "app.log", maxBytes=512_000, backupCount=3, encoding="utf-8"
@@ -109,6 +116,7 @@ def init_state() -> None:
         "profile": get_profile(),
         "chat_history": [],              # [{role, content, meta}]
         "chat_session_id": str(uuid4()),
+        "chat_pending": None,            # user message awaiting a gateway reply, or None
         "selected_product": None,        # product_id for detail page
         "checkout": {"step": "form", "order_id": None, "eta": None},
         "recently_viewed": [],           # [product_id]
@@ -126,7 +134,12 @@ def go_to(page: str) -> None:
 
 
 def get_device_type() -> str:
-    """Classify the caller's device from the User-Agent header, for chat attribution."""
+    """Classify the caller's device from the User-Agent header.
+
+    Not sent to the chat gateway — its ChatRequest schema has no device
+    field, only source_channel (web_chat/mobile_app/twitter). Kept as a
+    general-purpose helper for any future device-aware UI.
+    """
     try:
         user_agent = (st.context.headers.get("User-Agent") or "").lower()
     except Exception:  # noqa: BLE001 — headers can be unavailable outside a live session
@@ -215,7 +228,7 @@ def stars(rating: float) -> str:
 
 
 def generate_order_id() -> str:
-    return "IISC2026" + "".join(random.choices(string.digits, k=5))
+    return "ord-" + "".join(random.choices(string.digits, k=4))
 
 
 def estimated_delivery() -> str:
