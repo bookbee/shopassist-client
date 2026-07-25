@@ -21,9 +21,16 @@ git clone https://github.com/bookbee/shopassist-client
 cd shopassist-client
 python -m venv .venv
 source .venv/bin/activate   # Windows: .venv\Scripts\activate
-pip install -r requirements.txt
+pip install -r requirements-dev.txt
 streamlit run app.py
 ```
+
+`requirements-dev.txt` is `requirements.txt` plus `watchdog`, so Streamlit
+picks up saved file edits and reruns automatically — without it, Streamlit
+falls back to slow polling (or, in some environments, doesn't notice edits
+at all until the process is restarted by hand). The Docker image installs
+`requirements.txt` alone; `watchdog` has nothing to do inside a container
+you're not live-editing.
 
 Log in with any user ID, using that same value as the password too (demo auth only — see `pages/login.py`).
 The chat widget needs a gateway on `API_BASE_URL`; for local demos, run the
