@@ -317,13 +317,57 @@ div[data-testid="stPopoverBody"]:has(.qa-marker.qa-hidden) div.st-key-chat_quick
   color: var(--ink);
 }
 
-/* chat_form's own submit button (chatbot/chat_ui.py) only exists so
-   pressing Enter in the message input submits it - st.form requires a
-   real form_submit_button to exist for that. Hidden, not removed: the
-   row-2 "Send" button's JS proxy still clicks it programmatically, and a
-   real click would still work too - Enter-to-submit and the click path
-   both rely on this same element actually being live in the DOM. */
+/* chat_form's own submit button (chatbot/chat_ui.py) only exists so it can
+   be clicked programmatically - st.form requires a real form_submit_button
+   to exist. Hidden, not removed: the row-2 "Send" button's JS proxy and
+   _TEXTAREA_ENTER_TO_SEND_JS's Enter handler both click it, and a real
+   click would still work too. */
 .st-key-chat_send_hidden { display: none; }
+
+/* Message textarea (chatbot/chat_ui.py, row 1) - Streamlit's height="content"
+   already grows the box to fit what's typed; the rules below turn that
+   normal-flow growth into an overlay that grows UPWARD instead, so a long
+   message never pushes the Clear/Send row down or changes the popover's own
+   height (see _chat_panel's docstring: the panel must never resize on its
+   own). The outer widget wrapper keeps a fixed, reserved height; the actual
+   textarea is anchored to that wrapper's bottom edge and grows past its top
+   edge, painting over the bottom of the history pane above it, up to a
+   200px cap before it scrolls internally.
+
+   The wrapper's `height` below is a fallback only - 84px is roughly right
+   for an empty box, but the real value depends on font metrics that vary
+   by browser/device/zoom/accessibility text-size settings (learned this by
+   getting it wrong twice: 42px was a guess that left the textarea quietly
+   overlapping upward into the quick-action buttons above it even at rest,
+   and 84px measured in one test browser still didn't hold on every real
+   device). chatbot/chat_ui.py's _TEXTAREA_COLLAPSED_HEIGHT_JS measures the
+   real value live in whichever browser is actually rendering the page and
+   overwrites this wrapper's height with an inline style - deliberately NOT
+   !important here so that inline style reliably wins once it runs. The
+   textarea's own min-height is intentionally left unset for the same
+   reason - Streamlit's own "content" sizing already governs it; only the
+   upper max-height bound below is a fixed design choice, not something
+   that needs to match real font metrics. */
+.st-key-chat_text {
+  position: relative !important;
+  height: 84px;
+  overflow: visible !important;
+}
+.st-key-chat_text [data-testid="stTextAreaRootElement"] {
+  position: absolute !important;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  max-height: 200px !important;
+}
+.st-key-chat_text textarea {
+  max-height: 200px !important;
+  overflow-y: auto !important;
+  resize: none !important;
+  background: #FFFFFF;
+  border-radius: 10px !important;
+  box-shadow: 0 -4px 12px rgba(58, 46, 51, 0.14);
+}
 
 /* chat history pane: faint centered logo watermark for the empty state,
    layered under an ivory wash so it stays subtle once bubbles fill it. */

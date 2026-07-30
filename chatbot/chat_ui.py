@@ -98,19 +98,31 @@ def _inject_autoscroll() -> None:
 # `disabled` attribute changing, and focuses it every time that flips to
 # enabled - which then keeps working for every future reply, without this
 # script needing to run again itself.
+#
+# attach() retries for a couple of seconds if the element isn't there yet
+# rather than giving up after one querySelector - this iframe's script runs
+# the instant Streamlit streams it down, which can race ahead of the actual
+# <textarea> being mounted (measured: the switch from text_input to
+# text_area for CR2's auto-grow made this race easy to lose - the plain
+# text_input this used to target apparently hydrated fast enough to usually
+# win it).
 _FOCUS_INPUT_JS = """
 <script>
 (function() {
-  function attach() {
-    var el = window.parent.document.querySelector('.st-key-chat_text input');
-    if (!el || el.dataset.focusRestoreObserved) { return; }
+  function attach(triesLeft) {
+    var el = window.parent.document.querySelector('.st-key-chat_text textarea');
+    if (!el) {
+      if (triesLeft > 0) { setTimeout(function() { attach(triesLeft - 1); }, 100); }
+      return;
+    }
+    if (el.dataset.focusRestoreObserved) { return; }
     el.dataset.focusRestoreObserved = "1";
     if (!el.disabled) { el.focus(); }
     new MutationObserver(function() {
       if (!el.disabled) { el.focus(); }
     }).observe(el, {attributes: true, attributeFilter: ['disabled']});
   }
-  attach();
+  attach(50);
 })();
 </script>
 """
@@ -118,6 +130,118 @@ _FOCUS_INPUT_JS = """
 
 def _inject_focus_restore() -> None:
     components_html(_FOCUS_INPUT_JS, height=0)
+
+
+# The message box is now a plain <textarea> (see _chat_panel's row 1, and
+# styles.css's .st-key-chat_text rules for why - it needs to grow with a
+# long message) rather than text_input's single-line <input>, so Enter no
+# longer submits the form on its own - a bare <textarea> always inserts a
+# newline. This restores "Enter sends, Shift+Enter inserts a newline" by
+# forwarding a plain Enter onto the real, hidden form_submit_button - the
+# same reach-into-the-parent-document trick _AUTOSCROLL_JS/_FOCUS_INPUT_JS
+# above and the row-2 Send proxy below all use. isComposing is checked so a
+# Japanese/Chinese/Korean IME's Enter-to-confirm-candidate keystroke isn't
+# hijacked into sending the message mid-composition. attach() retries until
+# the <textarea> exists - see _FOCUS_INPUT_JS's comment on the same race.
+_TEXTAREA_ENTER_TO_SEND_JS = """
+<script>
+(function() {
+  function attach(triesLeft) {
+    var el = window.parent.document.querySelector('.st-key-chat_text textarea');
+    if (!el) {
+      if (triesLeft > 0) { setTimeout(function() { attach(triesLeft - 1); }, 100); }
+      return;
+    }
+    if (el.dataset.enterToSendObserved) { return; }
+    el.dataset.enterToSendObserved = "1";
+    el.addEventListener('keydown', function(e) {
+      if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) {
+        e.preventDefault();
+        var sendBtn = window.parent.document.querySelector('.st-key-chat_send_hidden button');
+        if (sendBtn && !sendBtn.disabled) { sendBtn.click(); }
+      }
+    });
+  }
+  attach(50);
+})();
+</script>
+"""
+
+
+def _inject_textarea_enter_to_send() -> None:
+    components_html(_TEXTAREA_ENTER_TO_SEND_JS, height=0)
+
+
+# styles.css anchors the message textarea to the bottom of its own wrapper
+# and lets it grow UPWARD past the wrapper's top edge (so a long message
+# overlays the history pane above it instead of pushing the Clear/Send row
+# down - see that CSS block's own comment). That only works if the
+# wrapper's own reserved height matches what an EMPTY textarea actually
+# renders at on this exact browser - get that wrong and the textarea
+# overlaps upward into whatever sits above it even with nothing typed.
+#
+# That value can't be a hardcoded constant: it depends on real font
+# metrics, which differ by device/browser/zoom/accessibility text-size
+# settings - a value measured in one environment (even a real one, not a
+# guess) isn't guaranteed to hold on a different device. So this measures
+# it live, in the browser actually rendering the page, via el.scrollHeight
+# while the box is empty - scrollHeight reports the height needed to fit
+# all content with no scrolling, independent of the max-height/overflow
+# CSS capping what's actually painted, so it's the same "how tall would an
+# empty box naturally be" number regardless of those overrides - and
+# writes it onto the wrapper as a plain inline style. styles.css's `height`
+# rule on that wrapper is deliberately NOT !important so this inline style
+# reliably wins over it.
+#
+# Re-measures whenever the box is genuinely empty again: on first attach;
+# once document.fonts.ready resolves (a web font swapping in after first
+# paint changes the real metrics - the plausible reason a value measured
+# in one browser session didn't hold in another); on window resize
+# (rewrapping at a new width can change how many lines the placeholder
+# itself takes); and every time `disabled` flips back to false (a fresh
+# reply just arrived and clear_on_submit already emptied the value by
+# then - the same signal _FOCUS_INPUT_JS uses to restore focus at that
+# same moment). attach() retries until the element exists - see
+# _FOCUS_INPUT_JS's comment on the same mount race.
+_TEXTAREA_COLLAPSED_HEIGHT_JS = """
+<script>
+(function() {
+  function attach(triesLeft) {
+    var el = window.parent.document.querySelector('.st-key-chat_text textarea');
+    var wrap = window.parent.document.querySelector('.st-key-chat_text');
+    if (!el || !wrap) {
+      if (triesLeft > 0) { setTimeout(function() { attach(triesLeft - 1); }, 100); }
+      return;
+    }
+    if (el.dataset.collapsedHeightObserved) { return; }
+    el.dataset.collapsedHeightObserved = "1";
+
+    function sync() {
+      if (el.value) { return; }
+      wrap.style.height = el.scrollHeight + 'px';
+    }
+
+    sync();
+    if (window.parent.document.fonts) {
+      window.parent.document.fonts.ready.then(sync);
+    }
+    var resizeTimer;
+    window.parent.addEventListener('resize', function() {
+      clearTimeout(resizeTimer);
+      resizeTimer = setTimeout(sync, 150);
+    });
+    new MutationObserver(function() {
+      if (!el.disabled) { sync(); }
+    }).observe(el, {attributes: true, attributeFilter: ['disabled']});
+  }
+  attach(50);
+})();
+</script>
+"""
+
+
+def _inject_textarea_collapsed_height_sync() -> None:
+    components_html(_TEXTAREA_COLLAPSED_HEIGHT_JS, height=0)
 
 
 def _new_ticket(response: ChatResponse) -> dict:
@@ -191,19 +315,19 @@ def _resolve_pending() -> None:
 # --------------------------------------------------------------------------- #
 def _on_form_send() -> None:
     """The real (but visually hidden - see styles.css's .st-key-chat_send_hidden
-    rule) form_submit_button's on_click. Fires when the user presses Enter in
-    the message input, or when the visible "Send" button in row 2 below
-    forwards a JS-triggered click onto this real button (see the
-    components.html snippet at that button's definition) - either way, a
-    genuine form submission, so chat_text is guaranteed fresh here and
-    clear_on_submit handles clearing it.
+    rule) form_submit_button's on_click. Fires when the visible "Send" button
+    in row 2 below forwards a JS-triggered click onto this real button (see
+    the components.html snippet at that button's definition), or when
+    _TEXTAREA_ENTER_TO_SEND_JS does the same for a plain Enter in the message
+    textarea (a bare <textarea> only inserts a newline on its own - it never
+    submits a form) - either way, a genuine form submission, so chat_text is
+    guaranteed fresh here and clear_on_submit handles clearing it.
 
-    Deliberately kept as a real st.form: a bare (non-form) text_input's
-    on_change fires on ANY blur, not just Enter - clicking Clear
-    conversation, a quick action, or the mic while text sits unsent in the
-    box would silently send it too. A real HTML form only submits on Enter
-    or an explicit submit-button click, which is exactly the distinction
-    needed here."""
+    Deliberately kept as a real st.form: a bare (non-form) widget's on_change
+    fires on ANY blur, not just Enter - clicking Clear conversation, a quick
+    action, or the mic while text sits unsent in the box would silently send
+    it too. A real HTML form only submits on an explicit submit-button click
+    (real or JS-proxied), which is exactly the distinction needed here."""
     _enqueue(st.session_state.get("chat_text", ""))
 
 
@@ -390,41 +514,44 @@ def _chat_panel() -> None:
     # user-facing "Send" button lives in row 2 below as a JS proxy that
     # forwards its click onto this real one - see that button's own comment.
     #
-    # Mic button is a sibling of chat_form, not inside it - it acts
-    # immediately on a transcript (like a quick-action click), it doesn't
-    # wait for a "Send" click the way the text input does. See
-    # chatbot/voice_input.py's own docstring for why a fresh transcript
-    # is enqueued+rerun right here rather than via an on_click callback -
-    # custom components report their value during the normal script body,
-    # not in a separate callback phase the way native widgets do.
-    form_col, mic_col = st.columns([6, 1])
-    with form_col:
-        with st.form("chat_form", clear_on_submit=True, border=False):
-            st.text_input(
-                "Message",
-                key="chat_text",
-                placeholder="Type a message…",
-                label_visibility="collapsed",
-                disabled=pending,
-            )
-            st.form_submit_button("Send", key="chat_send_hidden", on_click=_on_form_send, disabled=pending)
-    with mic_col:
-        voice_text = voice_input(key="chat_voice", disabled=pending)
+    # Full width now that the mic lives in row 2 (see below) rather than
+    # sharing this row - freeing that column for the textarea means it wraps
+    # less and so needs to grow vertically less often for the same message
+    # (see styles/styles.css's .st-key-chat_text overlay-growth comment).
+    with st.form("chat_form", clear_on_submit=True, border=False):
+        st.text_area(
+            "Message",
+            key="chat_text",
+            placeholder="Type a message…",
+            label_visibility="collapsed",
+            height="content",
+            disabled=pending,
+        )
+        st.form_submit_button("Send", key="chat_send_hidden", on_click=_on_form_send, disabled=pending)
 
-    if voice_text and not pending:
-        _enqueue(voice_text)
-        st.rerun()
-
-    # Row 2: "Clear conversation" at the left corner, "Send" at the right.
+    # Row 2: "Clear conversation" at the left corner; mic + "Send" grouped
+    # together at the right, mic immediately to Send's left - the mic is
+    # just an alternate way to produce the message Send then dispatches
+    # (voice instead of typing), so it belongs beside Send, not beside the
+    # unrelated, destructive Clear action.
+    #
     # Clear conversation is a plain st.button (st.form can't contain one -
     # only form_submit_button - and _on_clear has nothing to do with the
     # form's text anyway). The visible "Send" here is NOT a second Streamlit
     # widget - it's a real HTML button rendered via components.html whose
     # onclick reaches into the parent document (same trick _AUTOSCROLL_JS
-    # uses above) and clicks the real, hidden form_submit_button in row 1,
-    # so the actual send still goes through one genuine form submission
-    # either way Enter or this button is used.
-    clear_col, send_col = st.columns([3, 1])
+    # uses above) and clicks the real, hidden form_submit_button above, so
+    # the actual send still goes through one genuine form submission either
+    # way Enter or this button is used.
+    #
+    # voice_input() is read here (a sibling of chat_form, not inside it) and
+    # acts immediately on a transcript (like a quick-action click) rather
+    # than waiting for a "Send" click the way the text input does - see
+    # chatbot/voice_input.py's own docstring for why a fresh transcript is
+    # enqueued+rerun right here rather than via an on_click callback: custom
+    # components report their value during the normal script body, not in a
+    # separate callback phase the way native widgets do.
+    clear_col, mic_col, send_col = st.columns([3, 1, 1])
     with clear_col:
         st.button(
             "Clear conversation",
@@ -432,6 +559,8 @@ def _chat_panel() -> None:
             on_click=_on_clear,
             disabled=(not st.session_state.chat_history) or pending,
         )
+    with mic_col:
+        voice_text = voice_input(key="chat_voice", disabled=pending)
     with send_col:
         components_html(
             f"""
@@ -457,6 +586,10 @@ def _chat_panel() -> None:
             height=40,
         )
 
+    if voice_text and not pending:
+        _enqueue(voice_text)
+        st.rerun()
+
     # Resolving pending last, after every other element in the panel has
     # already rendered once for this run - st.rerun() halts execution
     # immediately, so anything placed *after* it (as this used to be, mid-
@@ -474,6 +607,8 @@ def _chat_panel() -> None:
     # st.rerun() otherwise) - see _inject_focus_restore's own docstring for
     # why that's exactly the right moment.
     _inject_focus_restore()
+    _inject_textarea_enter_to_send()
+    _inject_textarea_collapsed_height_sync()
 
 
 def render_chatbot() -> None:
