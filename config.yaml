@@ -16,10 +16,10 @@ api:
   base_url: "http://localhost:8000"
   chat_endpoint: "/api/v1/chat"
   # Must be >= shopassist's own CHAT_REQUEST_TIMEOUT_SECONDS (see that
-  # repo's .env.example) - its shipped fully-local config makes 4
-  # sequential CPU-only LLM calls per request, measured at ~200s end to
-  # end on a capstone laptop. Override with TIMEOUT in .env for deployments.
-  timeout_seconds: 360
+  # repo's .env.example) - its shipped fully-local config makes
+  # several sequential CPU-only LLM calls per sub-task; measured ~72s for
+  # a single-agent question and ~318s for a two-agent one. Override with TIMEOUT in .env for deployments.
+  timeout_seconds: 600
   # Dummy placeholder for the gateway's X-API-Key auth (see shopassist's
   # api/security.py). Override with API_KEY in .env once a real key is
   # issued - harmless as-is while the gateway's API_KEY_ENFORCE is off.

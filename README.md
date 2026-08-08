@@ -1,13 +1,23 @@
 # shopassist-client
 
+> **New here, or just want to see it run?** Don't start with this repo.
+> Clone all five ShopAssist repos as siblings and run
+> [`shopassist-devops`](../shopassist-devops/) — one command brings up the
+> whole platform, with **Docker Desktop as the only thing you install**.
+> That README also has a plain-language tour of the architecture and a
+> [concepts + further-reading guide](../shopassist-devops/README.md#concepts-and-where-to-read-more)
+> for every AI term used across these projects.
+>
+> Read on here for the storefront's own internals, and how to run the UI standalone.
+
 Streamlit web client for ShopAssist — the "IISc Alumni Store" merchandise
 portal (catalog, cart, checkout, orders, profile) plus a floating AI
-assistant that talks to the `shopassist` backend over one HTTP endpoint.
+assistant that talks to the `shopassist-service` backend over one HTTP endpoint.
 
 - **Streamlit/web developers** own this whole repo — see "For UI
   developers" below to run it and find your way around.
 - **Anyone integrating with the API** only needs "Chat API contract"
-  below to keep `shopassist`'s `/api/v1/chat` endpoint compatible with
+  below to keep `shopassist-service`'s `/api/v1/chat` endpoint compatible with
   this client.
 
 ## For UI developers
@@ -46,7 +56,7 @@ message of a session gets a "Hi \<name\>!" greeting from
 `data/profile.json`.
 
 To point at the real gateway instead: stop `mock_gateway.py`, start
-`shopassist`'s FastAPI service on the same port — no code or config change
+`shopassist-service`'s FastAPI service on the same port — no code or config change
 needed here.
 
 ### Running with Docker
@@ -67,7 +77,12 @@ default:
 
 ```env
 API_BASE_URL=http://localhost:8000
-TIMEOUT=30
+# Seconds to wait for a chat reply. Must be >= the API's own
+# CHAT_REQUEST_TIMEOUT_SECONDS (600 by default), never lower: with the
+# shipped CPU-only local model one turn makes several sequential LLM
+# calls and can take 150-360s, and a shorter value here just shows the
+# user a timeout error while the API is still working normally.
+TIMEOUT=600
 APP_TITLE=IISc Alumni Store
 ENABLE_CHATBOT=true
 LOG_LEVEL=INFO
@@ -135,14 +150,14 @@ collapse to the same in-chat "unavailable" message — never a raw error.
 
 ### Known issues
 
-- `mock_gateway.py` and a real `uvicorn` instance of the shopassist API
+- `mock_gateway.py` and a real `uvicorn` instance of the shopassist-service API
   can't both hold port 8000 — check `lsof -i :8000` if chat looks wrong.
 - Don't `rm logs/app.log` while the app is running — restart it instead;
   the running process keeps writing to the deleted file's old inode.
 
 ## Chat API contract
 
-The only integration surface between this client and the `shopassist`
+The only integration surface between this client and the `shopassist-service`
 backend. Copied field-for-field from its Pydantic schemas
 (`api/schemas.py`) — `mock_gateway.py` and the real service are
 interchangeable without touching this repo's code.
