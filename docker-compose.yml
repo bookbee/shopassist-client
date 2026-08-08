@@ -1,7 +1,7 @@
 # ShopAssist :: storefront client, standalone.
 #
 # `docker compose up` from inside this repo alone builds and runs just
-# this container - same self-contained pattern as shopassist's own
+# this container - same self-contained pattern as shopassist-service's own
 # docker-compose.yml (and shopassist-database's).
 # shopassist-devops's root docker-compose.yml `include:`s this file
 # unmodified and layers the platform-wide network + the real
@@ -9,7 +9,7 @@
 # one that wires this up to the real, containerized shopassist API.
 #
 # Standalone (no shopassist-devops), this container talks to the API on
-# the host - `cd ../shopassist && docker compose up -d`, published on
+# the host - `cd ../shopassist-service && docker compose up -d`, published on
 # localhost:8000 - reached through `host.docker.internal`, which Docker
 # Desktop resolves out of the box on macOS/Windows and the `extra_hosts`
 # entry below adds on Linux.
@@ -29,7 +29,18 @@ services:
       # the app directly on the host, but "localhost" means the container
       # itself once inside Docker, not the host machine.
       API_BASE_URL: http://host.docker.internal:8000
-      TIMEOUT: "60"
+      # Must be >= the API's own CHAT_REQUEST_TIMEOUT_SECONDS (600 by
+      # default), NOT lower. This was hardcoded to "60" and silently
+      # overrode config.yaml - so with the shipped CPU-only local model,
+      # where one chat turn makes several sequential LLM calls, the client
+      # gave up and showed a timeout error on every single message while
+      # the API was still working normally. shopassist-devops drives this
+      # and the API's own timeout from one variable so they can't drift
+      # apart again.
+      #
+      # Measured on an 8-core CPU-only laptop with llama3.2:3b: a
+      # single-agent question ~72s, a two-agent one ~318s.
+      TIMEOUT: "${CHAT_TIMEOUT_SECONDS:-600}"
       APP_TITLE: IISc Alumni Store
       ENABLE_CHATBOT: "true"
       LOG_LEVEL: INFO

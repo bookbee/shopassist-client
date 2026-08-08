@@ -47,6 +47,12 @@ def render() -> None:
         st.image("assets/logo.png", width=64)
         st.markdown("## Alumni Store sign in")
         st.caption("Demo login — enter your User ID as the password too.")
+        # The seeded customers are alum-1001 .. alum-1010
+        # (shopassist-database/postgres/seeds/seed_customers.sql). Spelled
+        # out here because any *other* ID logs in fine but then has no
+        # orders or history behind it, which reads as a broken chatbot
+        # rather than an empty account.
+        st.caption("Try **alum-1001** (password `alum-1001`). Seeded demo customers are `alum-1001` … `alum-1010`.")
         with st.form("login_form", border=True):
             st.text_input("User ID", key="login_user_id", placeholder="e.g. alum-1001")
             st.text_input("Password", key="login_password", type="password")
